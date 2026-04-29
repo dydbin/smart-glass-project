@@ -15,14 +15,14 @@
 ## Team Activity Focus
 
 - 스마트 글라스에서 촬영한 이미지를 업로드하는 전체 흐름을 잡는다.
-- 업로드 API와 S3 저장 경로를 정의해 서버 저장 파이프라인을 시작한다.
+- 업로드 API와 object storage 저장 경로를 정의해 서버 저장 파이프라인을 시작한다.
 - 업로드 메타데이터 구조를 정해 이후 추론 및 검색 단계와 연결한다.
 
 ## Representative Backlog Items
 
 - 스마트글라스 업로드 에픽
 - Camera capture module
-- Image upload(S3) API
+- Image upload(object storage) API
 - 업로드 메타데이터 스키마 정의
 
 ## Note

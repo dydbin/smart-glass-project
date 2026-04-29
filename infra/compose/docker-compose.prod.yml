@@ -3,3 +3,9 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/api-server.Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      - STORAGE_REGION=${STORAGE_REGION:-kr-standard}
+      - STORAGE_ENDPOINT_URL=${STORAGE_ENDPOINT_URL:-https://kr.object.ncloudstorage.com}
+      - STORAGE_ADDRESSING_STYLE=${STORAGE_ADDRESSING_STYLE:-path}

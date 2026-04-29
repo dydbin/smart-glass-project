@@ -1,0 +1,10 @@
+transformers>=4.48.0
+torch
+torchvision
+qwen-vl-utils
+json-repair
+certifi
+opencv-python
+Pillow
+bitsandbytes>=0.45.0
+accelerate

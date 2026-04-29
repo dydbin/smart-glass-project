@@ -1,5 +1,23 @@
 {
   "name": "@smart-glass/api-server",
   "private": true,
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "dependencies": {
+    "@nestjs/common": "^11.1.18",
+    "@nestjs/core": "^11.1.18",
+    "@nestjs/platform-express": "^11.1.18",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^25.5.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2"
+  },
+  "scripts": {
+    "start": "node dist/main.js",
+    "dev": "ts-node src/main.ts"
+  }
 }

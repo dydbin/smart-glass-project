@@ -86,6 +86,12 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="Beam size for generation.",
     )
+    parser.add_argument(
+        "--latency-budget-sec",
+        type=float,
+        default=10.0,
+        help="Latency budget used when choosing serving profile defaults.",
+    )
     return parser.parse_args()
 
 
@@ -201,6 +207,7 @@ def main() -> None:
         get_caption_model_spec,
         open_image,
     )
+    from src.models.serving_profile import build_caption_serving_profile
 
     image_paths = collect_images(args.dataset_dir, args.max_images)
     if not image_paths:
@@ -345,25 +352,39 @@ def main() -> None:
 
     write_csv(per_image_csv, per_image_rows)
     write_csv(summary_csv, summary_rows)
+    summary_payload = {
+        "generated_at_utc": timestamp,
+        "dataset_dir": args.dataset_dir,
+        "device": args.device,
+        "dtype": args.dtype,
+        "models": args.models,
+        "quantizations": args.quantizations,
+        "results": summary_rows,
+    }
     with summary_json.open("w", encoding="utf-8") as handle:
         json.dump(
-            {
-                "generated_at_utc": timestamp,
-                "dataset_dir": args.dataset_dir,
-                "device": args.device,
-                "dtype": args.dtype,
-                "models": args.models,
-                "quantizations": args.quantizations,
-                "results": summary_rows,
-            },
+            summary_payload,
             handle,
             ensure_ascii=False,
             indent=2,
         )
 
+    serving_profile_json = output_dir / f"caption_serving_profile_{timestamp}.json"
+    serving_profile_latest = output_dir / "caption_serving_profile.json"
+    serving_profile_payload = build_caption_serving_profile(
+        summary_payload,
+        latency_budget_sec=args.latency_budget_sec,
+        source_summary_path=str(summary_json),
+    )
+    for path in (serving_profile_json, serving_profile_latest):
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(serving_profile_payload, handle, ensure_ascii=False, indent=2)
+
     print(f"\nPer-image results: {per_image_csv}")
     print(f"Summary CSV: {summary_csv}")
     print(f"Summary JSON: {summary_json}")
+    print(f"Serving profile JSON: {serving_profile_json}")
+    print(f"Serving profile latest: {serving_profile_latest}")
 
 
 if __name__ == "__main__":

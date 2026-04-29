@@ -24,11 +24,14 @@ class MiddlewareTestCase(unittest.TestCase):
         self.assertEqual(response.json()["status"], "ok")
         self.assertEqual(response.json()["check_type"], "liveness")
         self.assertEqual(response.json()["service"], "inference-server")
+        self.assertEqual(response.json()["summary"]["total"], 1)
+        self.assertEqual(response.json()["summary"]["passing"], 1)
+        self.assertEqual(response.json()["summary"]["failing"], 0)
 
     def test_readiness_returns_request_id(self) -> None:
         with patch("src.api.health._check_queue", return_value=("ok", {"status": "ok"})):
             with patch(
-                "src.api.health._check_storage_config",
+                "src.api.health._check_storage",
                 return_value=("ok", {"status": "ok"}),
             ):
                 with patch(
@@ -42,6 +45,11 @@ class MiddlewareTestCase(unittest.TestCase):
         self.assertEqual(response.json()["status"], "ok")
         self.assertEqual(response.json()["check_type"], "readiness")
         self.assertEqual(response.json()["service"], "inference-server")
+        self.assertTrue(response.json()["ready"])
+        self.assertEqual(response.json()["summary"]["total"], 4)
+        self.assertEqual(response.json()["summary"]["passing"], 4)
+        self.assertEqual(response.json()["summary"]["failing"], 0)
+        self.assertEqual(response.json()["summary"]["failingChecks"], [])
 
     def test_readiness_returns_503_when_dependency_is_unhealthy(self) -> None:
         with patch(
@@ -49,7 +57,7 @@ class MiddlewareTestCase(unittest.TestCase):
             return_value=("error", {"status": "error", "message": "redis down"}),
         ):
             with patch(
-                "src.api.health._check_storage_config",
+                "src.api.health._check_storage",
                 return_value=("ok", {"status": "ok"}),
             ):
                 with patch(
@@ -62,11 +70,17 @@ class MiddlewareTestCase(unittest.TestCase):
         self.assertEqual(response.json()["status"], "degraded")
         self.assertEqual(response.json()["check_type"], "readiness")
         self.assertEqual(response.json()["checks"]["queue"]["status"], "error")
+        self.assertFalse(response.json()["ready"])
+        self.assertEqual(response.json()["summary"]["total"], 4)
+        self.assertEqual(response.json()["summary"]["passing"], 3)
+        self.assertEqual(response.json()["summary"]["failing"], 1)
+        self.assertEqual(response.json()["summary"]["failingChecks"], ["queue"])
+        self.assertEqual(response.json()["summary"]["statuses"]["queue"], "error")
 
     def test_health_alias_points_to_readiness(self) -> None:
         with patch("src.api.health._check_queue", return_value=("ok", {"status": "ok"})):
             with patch(
-                "src.api.health._check_storage_config",
+                "src.api.health._check_storage",
                 return_value=("ok", {"status": "ok"}),
             ):
                 with patch(

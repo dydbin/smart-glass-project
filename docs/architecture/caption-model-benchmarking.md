@@ -124,6 +124,66 @@ PYTHONPATH=apps/inference-server python3 apps/inference-server/scripts/benchmark
   --max-images 30
 ```
 
+선택적으로 latency budget을 명시할 수 있습니다.
+
+```bash
+cd /home/ghpark/projects/smart-glass-project
+PYTHONPATH=apps/inference-server python3 apps/inference-server/scripts/benchmark_caption_models.py \
+  --dataset-dir apps/inference-server/sample_data \
+  --models blip-base git-base vit-gpt2 \
+  --quantizations none \
+  --latency-budget-sec 10 \
+  --output-dir apps/inference-server/benchmark_results
+```
+
+## Serving Profile Artifact
+
+벤치마크가 끝나면 summary JSON뿐 아니라 서빙 결정용 profile도 함께 생성합니다.
+
+- timestamped artifact: `caption_serving_profile_<timestamp>.json`
+- stable artifact: `caption_serving_profile.json`
+
+이 profile은 “실험 결과”와 “runtime 기본값” 사이를 잇는 machine-readable 산출물입니다.
+
+```mermaid
+flowchart LR
+  A["benchmark_caption_models.py"] --> B["caption_benchmark_summary_*.json"]
+  B --> C["caption_serving_profile_*.json"]
+  C --> D["INFERENCE_SERVING_PROFILE_PATH"]
+  D --> E["resolve_runtime_serving_settings()"]
+  E --> F["queue / preload / health"]
+```
+
+profile 기본 선택 규칙은 아래 순서를 따릅니다.
+
+1. `images_success > 0`
+2. `images_error == 0`
+3. `latency_p95_sec`가 존재
+4. latency budget 이내 후보 우선
+5. `lexical_f1_avg`가 있으면 높은 후보 우선
+6. 그 다음 `latency_p95_sec`, `peak_memory_max_mb`, `load_time_sec` 순으로 비교
+
+runtime 해석 우선순위는 다음과 같습니다.
+
+1. 명시적 `VISION_CAPTION_*` env
+2. `INFERENCE_SERVING_PROFILE_PATH`가 가리키는 profile 기본값
+3. 기존 legacy 기본값 (`blip-base`, `none`, `float16`)
+
+runtime / preload / health는 이제 이 선택 결과를 공통 `executionPolicy` 언어로 드러냅니다.
+
+- `settingsSource`
+- `profilePath`
+- `selectedModelKey`
+- `softTimeLimitSec`
+- `hardTimeLimitSec`
+- `fallbackModelKey`
+- `fallbackTriggered`
+
+주의:
+
+- 현재처럼 compose나 배포 환경에서 `VISION_CAPTION_*`를 이미 명시한 경우, serving profile은 관여하지 않습니다.
+- 즉 이 artifact는 “env를 비운 환경에서 benchmark 결과를 기본값으로 재사용”하려는 경우에만 적용됩니다.
+
 ## 결과 해석 기준
 
 운영 후보로 남길 기준 예시:
@@ -138,7 +198,8 @@ PYTHONPATH=apps/inference-server python3 apps/inference-server/scripts/benchmark
 1. 속도 탈락 모델 제거
 2. VRAM 초과 또는 불안정 모델 제거
 3. 남은 모델 중 캡션 품질 상위 모델 선택
-4. 최종 2개 모델만 실제 Celery 워커에 올려 A/B 테스트
+4. 선택 결과를 serving profile로 저장
+5. 최종 2개 모델만 실제 Celery 워커에 올려 A/B 테스트
 
 ## 코드 위치
 

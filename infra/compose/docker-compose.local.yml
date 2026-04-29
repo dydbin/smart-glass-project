@@ -3,18 +3,74 @@ services:
     image: redis:latest
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: smart_glass
+      POSTGRES_USER: api_server
+      POSTGRES_PASSWORD: api_server
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   inference-worker:
     build:
       context: ../..
       dockerfile: infra/docker/inference-server.Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "celery -A src.queue.tasks --result-backend \"$CELERY_RESULT_BACKEND\" worker --loglevel=info -P solo"
+      ]
     env_file:
       - ../../.env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    volumes:
+      - hf-cache:/root/.cache/huggingface
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - AWS_REGION=ap-northeast-2
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - STORAGE_REGION=${STORAGE_REGION:-kr-standard}
+      - STORAGE_ENDPOINT_URL=${STORAGE_ENDPOINT_URL:-https://kr.object.ncloudstorage.com}
+      - STORAGE_ADDRESSING_STYLE=${STORAGE_ADDRESSING_STYLE:-path}
+      - VISION_CAPTION_MODEL=${VISION_CAPTION_MODEL:-qwen2.5-vl-7b}
+      - VISION_CAPTION_QUANTIZATION=${VISION_CAPTION_QUANTIZATION:-4bit}
+      - VISION_CAPTION_DTYPE=${VISION_CAPTION_DTYPE:-float16}
+      - INFERENCE_WORKER_PRELOAD_ON_STARTUP=1
+      - INFERENCE_PRELOAD_FAIL_FAST=1
+      - INFERENCE_PRELOAD_STATUS_PATH=/tmp/inference-worker-preload.json
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "/app/scripts/worker_healthcheck.py"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
     deploy:
       resources:
         reservations:
@@ -31,10 +87,19 @@ services:
     env_file:
       - ../../.env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    volumes:
+      - hf-cache:/root/.cache/huggingface
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - AWS_REGION=ap-northeast-2
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - STORAGE_REGION=${STORAGE_REGION:-kr-standard}
+      - STORAGE_ENDPOINT_URL=${STORAGE_ENDPOINT_URL:-https://kr.object.ncloudstorage.com}
+      - STORAGE_ADDRESSING_STYLE=${STORAGE_ADDRESSING_STYLE:-path}
+      - VISION_CAPTION_MODEL=${VISION_CAPTION_MODEL:-qwen2.5-vl-7b}
+      - VISION_CAPTION_QUANTIZATION=${VISION_CAPTION_QUANTIZATION:-4bit}
+      - VISION_CAPTION_DTYPE=${VISION_CAPTION_DTYPE:-float16}
     ports:
       - "8000:8000"
     healthcheck:
@@ -49,3 +114,42 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  api-server:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api-server.Dockerfile
+    env_file:
+      - ../../.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      inference-worker:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - API_CAPTURE_ENABLE_MEMORY_STORE=${API_CAPTURE_ENABLE_MEMORY_STORE:-1}
+      - API_CAPTURE_DATABASE_URL=${API_CAPTURE_DATABASE_URL:-postgresql://api_server:api_server@postgres:5432/smart_glass}
+      - API_MEMORY_DEFAULT_TOP_K=${API_MEMORY_DEFAULT_TOP_K:-5}
+      - API_CAPTURE_WORKER_TIMEOUT_SEC=180
+    ports:
+      - "8002:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready').read()"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  hf-cache:
+  postgres-data:

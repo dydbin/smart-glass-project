@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from src.api.errors import register_exception_handlers
 from src.api.health import build_health_payload, build_liveness_payload
 from src.api.middleware import RequestContextLoggingMiddleware
+from src.api.tasks import router as task_router
 from src.core.logging import configure_logging
 from src.models.captioning import list_available_caption_models
 
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(RequestContextLoggingMiddleware)
     register_exception_handlers(app)
+    app.include_router(task_router)
 
     @app.get("/health/live")
     async def liveness_check() -> JSONResponse:

@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "smart-glass-client",
+    "slug": "smart-glass-client",
+    "android": {
+      "package": "com.anonymous.smartglasssmartglassclient"
+    }
+  }
+}
